@@ -10,8 +10,12 @@ from urllib.error import HTTPError, URLError
 import xml.etree.ElementTree as ET
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SGT       = timezone(timedelta(hours=8))  # 新加坡时间 (SGT)
-TARGET_DATE = (datetime.now(SGT) - timedelta(days=1)).strftime("%Y-%m-%d")
+SGT         = timezone(timedelta(hours=8))  # 新加坡时间 (SGT)
+_now        = datetime.now(SGT)
+# 正常运行抓昨天；第一次/测试时抓过去7天
+LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "1"))
+DATE_FROM   = (_now - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+DATE_TO     = (_now - timedelta(days=1)).strftime("%Y-%m-%d")
 
 SHEET_ID  = "1MCcEqV2OGkxFofWSRI6BW2OFYG35cNDHC2olbm43NWc"
 SHEET_TAB = "报告"
@@ -122,7 +126,7 @@ def fetch_think_tank(name, category, url):
             title    = get_text(title_el)
             pub_date = norm_date(get_text(date_el))
 
-            if not title or pub_date != TARGET_DATE:
+            if not title or not pub_date or pub_date < DATE_FROM or pub_date > DATE_TO:
                 continue
 
             articles.append({
@@ -302,7 +306,7 @@ def write_to_sheets(articles):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-    print(f"🔍 抓取日期: {TARGET_DATE}")
+    print(f"🔍 抓取范围: {DATE_FROM} 至 {DATE_TO}（{LOOKBACK_DAYS}天）")
     print(f"📡 {len(THINK_TANKS)} 个智库 RSS 源\n")
 
     all_articles = []
