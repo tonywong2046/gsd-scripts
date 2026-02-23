@@ -14,7 +14,7 @@ SGT       = timezone(timedelta(hours=8))  # 新加坡时间 (SGT)
 TARGET_DATE = (datetime.now(SGT) - timedelta(days=1)).strftime("%Y-%m-%d")
 
 SHEET_ID  = "1MCcEqV2OGkxFofWSRI6BW2OFYG35cNDHC2olbm43NWc"
-SHEET_TAB = "智库报告"
+SHEET_TAB = "报告"
 
 GEMINI_KEYS = [k for k in [
     os.environ.get("GEMINI_API_KEY", ""),
