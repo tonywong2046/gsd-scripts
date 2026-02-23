@@ -365,9 +365,9 @@ def write_to_sheets(articles):
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT", "")
     if sa_json:
         try:
-            import gspread
+            import gspread, base64
             from google.oauth2.service_account import Credentials
-            sa_info = json.loads(sa_json)
+            sa_info = json.loads(base64.b64decode(sa_json))
             creds = Credentials.from_service_account_info(
                 sa_info,
                 scopes=["https://www.googleapis.com/auth/spreadsheets"]
