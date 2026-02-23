@@ -12,10 +12,11 @@ import xml.etree.ElementTree as ET
 # ── Config ────────────────────────────────────────────────────────────────────
 SGT         = timezone(timedelta(hours=8))  # 新加坡时间 (SGT)
 _now        = datetime.now(SGT)
-# 正常运行抓昨天；第一次/测试时抓过去7天
+# 正常运行抓昨天；测试/补抓时可设 LOOKBACK_DAYS=7 等
 LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "1"))
 DATE_FROM   = (_now - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
-DATE_TO     = (_now - timedelta(days=1)).strftime("%Y-%m-%d")
+# LOOKBACK_DAYS=1 时只抓昨天；>1 时包含今天（方便测试验证）
+DATE_TO     = _now.strftime("%Y-%m-%d") if LOOKBACK_DAYS > 1 else (_now - timedelta(days=1)).strftime("%Y-%m-%d")
 
 SHEET_ID  = "1MCcEqV2OGkxFofWSRI6BW2OFYG35cNDHC2olbm43NWc"
 SHEET_TAB = "报告"
@@ -113,13 +114,13 @@ def fetch_think_tank(name, category, url):
         for item in items:
             if is_atom:
                 title_el = item.find(f"{NS_ATOM}title")
-                date_el  = (item.find(f"{NS_ATOM}updated") or
-                            item.find(f"{NS_ATOM}published"))
+                _upd     = item.find(f"{NS_ATOM}updated")
+                date_el  = _upd if _upd is not None else item.find(f"{NS_ATOM}published")
                 link     = get_atom_link(item)
             else:
                 title_el = item.find("title")
-                date_el  = (item.find("pubDate") or
-                            item.find(f"{NS_DC}date"))
+                _pub     = item.find("pubDate")
+                date_el  = _pub if _pub is not None else item.find(f"{NS_DC}date")
                 link_el  = item.find("link")
                 link     = get_text(link_el) if link_el is not None else ""
 
