@@ -1,6 +1,6 @@
 name: Fetch Journals Daily
 
-"on":
+on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
