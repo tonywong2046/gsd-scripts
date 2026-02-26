@@ -1,0 +1,18 @@
+name: Build net-test image
+
+on:
+  push:
+    paths: ['net-test/**']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Login to OCIR
+        run: printf '%s' "${{ secrets.OCIR_TOKEN }}" | docker login xsp.ocir.io --username axfazd56plva/wangsenhu@gmail.com --password-stdin
+      - name: Build and Push
+        run: |
+          docker build -t xsp.ocir.io/axfazd56plva/gsd-scripts/net-test:latest net-test/
+          docker push xsp.ocir.io/axfazd56plva/gsd-scripts/net-test:latest
