@@ -18,6 +18,16 @@ def handler(ctx, data: io.BytesIO = None):
       {"target": "jobs"}     → 每周五早 8 点，抓过去 7 天职位
       {"target": "all"}      → 全部运行（手动测试用）
     """
+    # ── 网络连通性测试 ────────────────────────────────────────────
+    from urllib.request import urlopen
+    logging.info(">>> 网络测试：尝试访问 CrossRef API...")
+    try:
+        with urlopen("https://api.crossref.org/works?query=test&rows=1", timeout=10) as r:
+            logging.info(f">>> 网络测试成功 ✅ HTTP {r.status}")
+    except Exception as e:
+        logging.error(f">>> 网络测试失败 ❌ {e}")
+    # ─────────────────────────────────────────────────────────────
+
     target = "all"
     try:
         body = json.loads(data.getvalue())
