@@ -41,20 +41,10 @@ jobs:
         env:
           GOOGLE_SA: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
         run: |
-          python3 << 'PYEOF'
-          import sys, json, base64, os
-          sa = os.environ['GOOGLE_SA']
-          try:
-              decoded = base64.b64decode(sa).decode()
-              json.loads(decoded)
-              with open('/tmp/gcp-key.json', 'w') as f:
-                  f.write(decoded)
-              print('Decoded from Base64')
-          except Exception:
-              with open('/tmp/gcp-key.json', 'w') as f:
-                  f.write(sa)
-              print('Used raw JSON')
-          PYEOF
+          # 尝试 base64 解码，验证是否有效 JSON，否则直接用原始值
+          echo "$GOOGLE_SA" | base64 -d > /tmp/gcp-key.json 2>/dev/null \
+            && python3 -c "import json; json.load(open('/tmp/gcp-key.json'))" 2>/dev/null \
+            || echo "$GOOGLE_SA" > /tmp/gcp-key.json
           gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
           gcloud config set project ${{ env.PROJECT_ID }}
           echo "✅ GCP 认证成功"

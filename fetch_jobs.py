@@ -16,9 +16,8 @@ SHEET_ID    = "1MCcEqV2OGkxFofWSRI6BW2OFYG35cNDHC2olbm43NWc"
 SHEET_RANGE = "工作"
 SGT         = timezone(timedelta(hours=8))
 TODAY       = datetime.now(SGT).strftime("%Y-%m-%d")
-SEEN_FILE   = os.path.join(os.path.dirname(__file__), "seen_jobs.json")
-RESET_ALL   = "--all" in sys.argv
-THE_ONLY    = "--the-only" in sys.argv
+# Cloud Run 源码目录只读，用 /tmp 存状态文件
+SEEN_FILE   = "/tmp/seen_jobs.json"
 
 BASE    = "https://www.jobs.ac.uk"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
@@ -73,7 +72,7 @@ RELIEFWEB_FEEDS = [
     ("International_Orgs", "https://reliefweb.int/jobs/rss.xml?ty=258")
 ]
 
-# 新增：HigherEdJobs & ASA 配置
+# HigherEdJobs & ASA
 HIGHERED_URLS = [
     ("Sociology", "https://www.higheredjobs.com/faculty/search.cfm?JobCat=93&suggest=2"),
     ("Politics & Government", "https://www.higheredjobs.com/faculty/search.cfm?JobCat=169&suggest=2"),
@@ -84,14 +83,17 @@ ASA_URL = "https://careercenter.asanet.org/jobs/faculty/"
 TARGET_SUBJECTS = list(dict.fromkeys([s for s, _ in SUBJECT_FEEDS] + ["International_Orgs"]))
 
 # ── 基础功能 ──────────────────────────────────────────────────────────────
-def load_seen():
-    if RESET_ALL: return set()
+def load_seen(reset=False):
+    if reset: return set()
     try:
         with open(SEEN_FILE) as f: return set(json.load(f))
     except: return set()
 
 def save_seen(seen):
-    with open(SEEN_FILE, "w") as f: json.dump(list(seen), f)
+    try:
+        with open(SEEN_FILE, "w") as f: json.dump(list(seen), f)
+    except Exception as e:
+        print(f"⚠️  seen_jobs 写入失败（非致命）: {e}")
 
 def parse_rss_description(desc_raw):
     text = html.unescape(html.unescape(desc_raw))
@@ -122,7 +124,6 @@ def scrape_detail(url):
     except:
         return "", url
 
-# ── 新增抓取逻辑：HigherEdJobs & ASA ──────────────────────────────────────
 def fetch_higheredjobs(seen):
     results = []
     for subj, url in HIGHERED_URLS:
@@ -130,7 +131,6 @@ def fetch_higheredjobs(seen):
             req = urllib.request.Request(url, headers=HEADERS)
             with urllib.request.urlopen(req, timeout=20) as r:
                 content = r.read().decode('utf-8')
-                # 正则匹配职位块
                 items = re.findall(r'<a href="details\.cfm\?JobCode=(\d+)[^"]*">([^<]+)</a>.*?<span class="inst-name">([^<]+)</span>', content, re.S)
                 for code, title, inst in items:
                     link = f"https://www.higheredjobs.com/faculty/details.cfm?JobCode={code}"
@@ -148,7 +148,6 @@ def fetch_asa(seen):
         req = urllib.request.Request(ASA_URL, headers=HEADERS)
         with urllib.request.urlopen(req, timeout=20) as r:
             content = r.read().decode('utf-8')
-            # 匹配 ASA 职位链接和标题
             items = re.findall(r'class="job-title">\s*<a href="([^"]+)">([^<]+)</a>.*?class="job-location">([^<]+)</span>', content, re.S)
             for path, title, inst in items:
                 link = "https://careercenter.asanet.org" + path if path.startswith('/') else path
@@ -160,17 +159,13 @@ def fetch_asa(seen):
     except: pass
     return results
 
-# ── 抓取逻辑 ──────────────────────────────────────────────────────────────
-def fetch_all(seen):
+def fetch_all(seen, the_only=False):
     jobs_by_subject = {s: [] for s in TARGET_SUBJECTS}
-    # 确保新增的学科键存在
     for s in ["Sociology", "Politics & Government", "Other Social Sciences"]:
         if s not in jobs_by_subject: jobs_by_subject[s] = []
-        
     all_links = set()
 
-    # 1. jobs.ac.uk
-    if not THE_ONLY:
+    if not the_only:
         for subj, path in SUBJECT_FEEDS:
             try:
                 req = urllib.request.Request(BASE + path, headers=RSS_HEADERS)
@@ -188,7 +183,6 @@ def fetch_all(seen):
                         all_links.add(link)
             except: continue
 
-    # 2. THE Jobs
     for label, url in THE_RSS_FEEDS:
         try:
             req = urllib.request.Request(url, headers=HEADERS)
@@ -211,7 +205,6 @@ def fetch_all(seen):
                     all_links.add(link)
         except: continue
 
-    # 3. ReliefWeb
     for subj, url in RELIEFWEB_FEEDS:
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS)) as r:
@@ -230,34 +223,26 @@ def fetch_all(seen):
                     all_links.add(link)
         except: continue
 
-    # 4. HigherEdJobs (新增)
-    he_jobs = fetch_higheredjobs(seen | all_links)
-    for j in he_jobs:
+    for j in fetch_higheredjobs(seen | all_links):
         jobs_by_subject[j["subj"]].append(j)
         all_links.add(j["link"])
 
-    # 5. ASA (新增)
-    asa_jobs = fetch_asa(seen | all_links)
-    for j in asa_jobs:
+    for j in fetch_asa(seen | all_links):
         jobs_by_subject[j["subj"]].append(j)
         all_links.add(j["link"])
 
     return jobs_by_subject, all_links
 
-# ── 写入 Google Sheets ───────────────────────────────────────────────────
 def write_to_sheets(jobs_dict):
     rows = []
     for subj, items in jobs_dict.items():
         for j in items:
             rows.append([j["date"], subj, j["inst"], j["title"], j["salary"], j["closing"], j["apply"], j["source"]])
-    
     if not rows: return False
-
     try:
         import base64
         cred_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT", "")
         if cred_json:
-            # 本地/GitHub Actions：使用 JSON key（Base64 或原始 JSON）
             try:
                 sa_info = json.loads(base64.b64decode(cred_json))
             except Exception:
@@ -265,26 +250,26 @@ def write_to_sheets(jobs_dict):
             creds = Credentials.from_service_account_info(sa_info,
                     scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
         else:
-            # GCP Cloud Run：使用 Application Default Credentials（运行时 service account）
             import google.auth
             creds, _ = google.auth.default(
                 scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
         gc = gspread.authorize(creds)
         ws = gc.open_by_key(SHEET_ID).worksheet(SHEET_RANGE)
-        # 新数据置顶：在第 2 行（标题行之后）插入，确保最新数据在最上方
         ws.insert_rows(rows, row=2, value_input_option="USER_ENTERED")
-        print(f"✓ 成功写入 {len(rows)} 条（已置顶）")
+        print(f"✓ 成功写入 {len(rows)} 条")
         return True
     except Exception as e:
         print(f"Sheets 写入异常: {e}")
         return False
 
-# ── 执行 ──────────────────────────────────────────────────────────────────
 def main():
-    seen = load_seen()
-    jobs, all_links = fetch_all(seen)
-    
-    # 补充详情 (仅针对 jobs.ac.uk)
+    # Cloud Run 上 sys.argv 为空，这两个 flag 只在本地命令行有效
+    reset_all = "--all" in sys.argv
+    the_only  = "--the-only" in sys.argv
+
+    seen = load_seen(reset=reset_all)
+    jobs, all_links = fetch_all(seen, the_only=the_only)
+
     ac_jobs = [j for items in jobs.values() for j in items if j["source"] == "jobs.ac.uk"]
     if ac_jobs:
         with ThreadPoolExecutor(max_workers=5) as ex:
