@@ -271,8 +271,9 @@ def write_to_sheets(jobs_dict):
                 scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
         gc = gspread.authorize(creds)
         ws = gc.open_by_key(SHEET_ID).worksheet(SHEET_RANGE)
-        # 新数据置顶：在第 2 行（标题行之后）插入，确保最新数据在最上方
-        ws.insert_rows(rows, row=2, value_input_option="USER_ENTERED")
+        # 新数据置顶：先插入空行分隔，再插入数据，视觉上区分每次抓取批次
+        separator = [[""] * len(rows[0])]
+        ws.insert_rows(separator + rows, row=2, value_input_option="USER_ENTERED")
         print(f"✓ 成功写入 {len(rows)} 条（已置顶）")
         return True
     except Exception as e:

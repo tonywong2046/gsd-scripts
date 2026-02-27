@@ -34,30 +34,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 把 GOOGLE_SERVICE_ACCOUNT（支持 Base64 或原始 JSON）写成 key 文件
-      - name: Write GCP credentials file
+      # 提前解码 key 并设置 GOOGLE_APPLICATION_CREDENTIALS，
+      # 让 setup-gcloud@v2 不报 "not authenticated" Warning
+      - name: Prepare GCP credentials
+        env:
+          GOOGLE_SA: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
         run: |
-          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' | python3 -c "
-          import sys, json, base64
-          raw = sys.stdin.read().strip()
-          try:
-              decoded = base64.b64decode(raw).decode()
-              json.loads(decoded)
-              print(decoded)
-          except Exception:
-              print(raw)
-          " > /tmp/gcp-key.json
+          echo "$GOOGLE_SA" | base64 -d > /tmp/gcp-key.json 2>/dev/null \
+            && python3 -c "import json; json.load(open('/tmp/gcp-key.json'))" 2>/dev/null \
+            || echo "$GOOGLE_SA" > /tmp/gcp-key.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json" >> $GITHUB_ENV
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
 
       - name: Set up gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Activate GCP service account
+        run: |
+          SA_EMAIL=$(python3 -c "import json; print(json.load(open('/tmp/gcp-key.json')).get('client_email','UNKNOWN'))")
+          echo "🔑 Key belongs to SA: $SA_EMAIL"
+          gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
+          gcloud config set account "$SA_EMAIL"
+          gcloud config set project ${{ env.PROJECT_ID }}
+          echo "✅ 认证完成"
+          gcloud auth list
+          echo "Active account: $(gcloud config get-value account)"
+          echo "Project: $(gcloud config get-value project)"
 
       # ── 部署三个函数 ──────────────────────────────────────────────────────
 
