@@ -741,7 +741,7 @@ def write_to_sheets(jobs_by_subject):
 
 
 # ── 主函数 ────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
+def main():
     mode = "全量模式（--all）" if RESET_ALL else ("限速模式（--week）" if WEEK_MODE else "增量模式")
     print(f"=== 抓取学术职位 [jobs.ac.uk + THE Jobs + ReliefWeb] [{mode}] ===")
     print(f"📅 抓取范围: {DATE_LABEL}")
@@ -765,3 +765,7 @@ if __name__ == "__main__":
             print(f"已更新记录（共 {len(seen | all_links)} 条）")
     else:
         save_seen(seen | all_links)
+
+
+if __name__ == "__main__":
+    main()
