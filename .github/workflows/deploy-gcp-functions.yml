@@ -46,24 +46,22 @@ jobs:
             && python3 -c "import json; json.load(open('/tmp/gcp-key.json'))" 2>/dev/null \
             || echo "$GOOGLE_SA" > /tmp/gcp-key.json
 
-          # 【调试】打印 key 所属的 service account email
+          # 打印 key 所属的 service account email（用于验证）
           SA_EMAIL=$(python3 -c "import json; print(json.load(open('/tmp/gcp-key.json')).get('client_email','UNKNOWN'))")
           echo "🔑 Key belongs to SA: $SA_EMAIL"
 
-          # 激活 service account（gcloud CLI 使用）
+          # 激活 service account
           gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
-
-          # 明确设置 active account 和 project
           gcloud config set account "$SA_EMAIL"
           gcloud config set project ${{ env.PROJECT_ID }}
 
-          # 为 ADC（Google Cloud SDK/Python库）设置凭证路径
+          # 为 ADC 设置凭证路径
           echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json" >> $GITHUB_ENV
 
-          echo "✅ 认证完成 — active accounts:"
+          echo "✅ 认证完成"
           gcloud auth list
-          echo "✅ Active account: $(gcloud config get-value account)"
-          echo "✅ Project: $(gcloud config get-value project)"
+          echo "Active account: $(gcloud config get-value account)"
+          echo "Project: $(gcloud config get-value project)"
 
       - name: Deploy fetch_jobs
         run: |
