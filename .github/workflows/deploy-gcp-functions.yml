@@ -34,28 +34,35 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ 步骤1：先解码 SA key，写入 GOOGLE_APPLICATION_CREDENTIALS
-      # setup-gcloud@v2 在 GOOGLE_APPLICATION_CREDENTIALS 已设置时会自动配置 gcloud 认证
-      - name: Prepare GCP credentials
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authenticate to GCP
         env:
           GOOGLE_SA: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
         run: |
+          # 解码 base64（如果是 base64 编码）或直接使用原始 JSON
           echo "$GOOGLE_SA" | base64 -d > /tmp/gcp-key.json 2>/dev/null \
             && python3 -c "import json; json.load(open('/tmp/gcp-key.json'))" 2>/dev/null \
             || echo "$GOOGLE_SA" > /tmp/gcp-key.json
-          python3 -c "import json; d=json.load(open('/tmp/gcp-key.json')); print('✅ SA:', d.get('client_email','UNKNOWN'))"
+
+          # 【调试】打印 key 所属的 service account email
+          SA_EMAIL=$(python3 -c "import json; print(json.load(open('/tmp/gcp-key.json')).get('client_email','UNKNOWN'))")
+          echo "🔑 Key belongs to SA: $SA_EMAIL"
+
+          # 激活 service account（gcloud CLI 使用）
+          gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
+
+          # 明确设置 active account 和 project
+          gcloud config set account "$SA_EMAIL"
+          gcloud config set project ${{ env.PROJECT_ID }}
+
+          # 为 ADC（Google Cloud SDK/Python库）设置凭证路径
           echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json" >> $GITHUB_ENV
 
-      # ✅ 步骤2：setup-gcloud 在 GOOGLE_APPLICATION_CREDENTIALS 设好后运行，自动配置认证
-      - name: Set up gcloud CLI
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-
-      - name: Verify authentication
-        run: |
-          echo "✅ Active accounts:"
+          echo "✅ 认证完成 — active accounts:"
           gcloud auth list
+          echo "✅ Active account: $(gcloud config get-value account)"
           echo "✅ Project: $(gcloud config get-value project)"
 
       - name: Deploy fetch_jobs
