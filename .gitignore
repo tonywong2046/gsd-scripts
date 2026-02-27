@@ -18,6 +18,8 @@ __pycache__/
 gpha-*.json
 service-account*.json
 *-service-account.json
+*-key.json
+claude-mcp-key.json
 
 # RTF 备注文件（本地参考，不需要上传）
 *.rtf

@@ -1,6 +1,5 @@
-fdk>=0.1.60
-gspread
-google-auth
+gspread>=6.0.0
+google-auth>=2.0.0
 google-auth-oauthlib
 google-auth-httplib2
-urllib3
+functions-framework>=3.0.0

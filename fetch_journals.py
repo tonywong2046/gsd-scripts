@@ -306,37 +306,33 @@ def write_to_sheets(articles):
 
     # 环境检测：如果有 GOOGLE_SERVICE_ACCOUNT，说明在 GitHub/云端运行
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT", "")
-    if sa_json:
-        try:
-            import gspread, base64
-            from google.oauth2.service_account import Credentials
-            # 兼容 Base64 编码或原始 JSON 字符串
+    try:
+        import gspread, base64
+        from google.oauth2.service_account import Credentials
+
+        if sa_json:
+            # 本地/GitHub Actions：使用 JSON key（Base64 或原始 JSON）
             try:
                 sa_info = json.loads(base64.b64decode(sa_json))
             except:
                 sa_info = json.loads(sa_json)
-                
             creds = Credentials.from_service_account_info(
                 sa_info,
                 scopes=["https://www.googleapis.com/auth/spreadsheets"]
             )
-            gc = gspread.authorize(creds)
-            ws = gc.open_by_key(SHEET_ID).worksheet(SHEET_RANGE)
-            # 新数据置顶：在第 2 行（标题行之后）插入，确保最新数据在最上方
-            ws.insert_rows(rows, row=2, value_input_option="USER_ENTERED")
-            print(f"✅ 成功写入 {len(articles)} 篇文章到 Google Sheets（已置顶）")
-        except Exception as e:
-            print(f"❌ gspread 写入失败: {e}")
-    else:
-        # 本地模式使用 gog 命令行工具
-        values_json = json.dumps(rows, ensure_ascii=False)
-        cmd = ["gog", "sheets", "append", SHEET_ID, SHEET_RANGE,
-               "--values-json", values_json, "--insert", "INSERT_ROWS"]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"✅ 成功写入 {len(articles)} 篇文章到 Google Sheets（gog）")
         else:
-            print(f"❌ 写入失败: {result.stderr.strip()}")
+            # GCP Cloud Run：使用 Application Default Credentials
+            import google.auth
+            creds, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/spreadsheets"])
+
+        gc = gspread.authorize(creds)
+        ws = gc.open_by_key(SHEET_ID).worksheet(SHEET_RANGE)
+        # 新数据置顶：在第 2 行（标题行之后）插入，确保最新数据在最上方
+        ws.insert_rows(rows, row=2, value_input_option="USER_ENTERED")
+        print(f"✅ 成功写入 {len(articles)} 篇文章到 Google Sheets（已置顶）")
+    except Exception as e:
+        print(f"❌ gspread 写入失败: {e}")
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 def main():

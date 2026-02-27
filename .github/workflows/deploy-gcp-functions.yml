@@ -1,0 +1,123 @@
+name: Deploy to GCP Cloud Run Functions
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'fetch_jobs.py'
+      - 'fetch_journals.py'
+      - 'fetch_reports.py'
+      - 'main.py'
+      - 'requirements.txt'
+      - '.github/workflows/deploy-gcp-functions.yml'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: '手动触发原因（可选）'
+        required: false
+        default: '手动重新部署'
+
+env:
+  PROJECT_ID: gpha-470410
+  REGION: asia-southeast1
+  RUNTIME: python312
+  SERVICE_ACCOUNT: claude-mcp@gpha-470410.iam.gserviceaccount.com
+  MEMORY: 512Mi
+  TIMEOUT: 540s
+
+jobs:
+  deploy:
+    name: Deploy Cloud Run Functions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 把 GOOGLE_SERVICE_ACCOUNT（支持 Base64 或原始 JSON）写成 key 文件
+      - name: Write GCP credentials file
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' | python3 -c "
+          import sys, json, base64
+          raw = sys.stdin.read().strip()
+          try:
+              decoded = base64.b64decode(raw).decode()
+              json.loads(decoded)
+              print(decoded)
+          except Exception:
+              print(raw)
+          " > /tmp/gcp-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json" >> $GITHUB_ENV
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      # ── 部署三个函数 ──────────────────────────────────────────────────────
+
+      - name: Deploy fetch_jobs
+        run: |
+          gcloud functions deploy fetch-jobs \
+            --gen2 \
+            --runtime=${{ env.RUNTIME }} \
+            --region=${{ env.REGION }} \
+            --source=. \
+            --entry-point=fetch_jobs_handler \
+            --trigger-http \
+            --no-allow-unauthenticated \
+            --service-account=${{ env.SERVICE_ACCOUNT }} \
+            --memory=${{ env.MEMORY }} \
+            --timeout=${{ env.TIMEOUT }} \
+            --set-env-vars="GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GEMINI_API_KEY_2=${{ secrets.GEMINI_API_KEY_2 }},GEMINI_API_KEY_3=${{ secrets.GEMINI_API_KEY_3 }},GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}"
+          echo "✅ fetch-jobs 部署完成"
+
+      - name: Deploy fetch_journals
+        run: |
+          gcloud functions deploy fetch-journals \
+            --gen2 \
+            --runtime=${{ env.RUNTIME }} \
+            --region=${{ env.REGION }} \
+            --source=. \
+            --entry-point=fetch_journals_handler \
+            --trigger-http \
+            --no-allow-unauthenticated \
+            --service-account=${{ env.SERVICE_ACCOUNT }} \
+            --memory=${{ env.MEMORY }} \
+            --timeout=${{ env.TIMEOUT }} \
+            --set-env-vars="GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GEMINI_API_KEY_2=${{ secrets.GEMINI_API_KEY_2 }},GEMINI_API_KEY_3=${{ secrets.GEMINI_API_KEY_3 }},GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}"
+          echo "✅ fetch-journals 部署完成"
+
+      - name: Deploy fetch_reports
+        run: |
+          gcloud functions deploy fetch-reports \
+            --gen2 \
+            --runtime=${{ env.RUNTIME }} \
+            --region=${{ env.REGION }} \
+            --source=. \
+            --entry-point=fetch_reports_handler \
+            --trigger-http \
+            --no-allow-unauthenticated \
+            --service-account=${{ env.SERVICE_ACCOUNT }} \
+            --memory=${{ env.MEMORY }} \
+            --timeout=${{ env.TIMEOUT }} \
+            --set-env-vars="GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GEMINI_API_KEY_2=${{ secrets.GEMINI_API_KEY_2 }},GEMINI_API_KEY_3=${{ secrets.GEMINI_API_KEY_3 }},GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}"
+          echo "✅ fetch-reports 部署完成"
+
+      # ── 打印结果 ──────────────────────────────────────────────────────────
+
+      - name: Print function URLs
+        run: |
+          echo "## 🚀 部署结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          for func in fetch-jobs fetch-journals fetch-reports; do
+            URL=$(gcloud functions describe $func --gen2 --region=${{ env.REGION }} --format="value(serviceConfig.uri)" 2>/dev/null || echo "获取失败")
+            echo "- **$func**: \`$URL\`" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 函数已设为 --no-allow-unauthenticated，需通过 Cloud Scheduler 的 OIDC token 调用。" >> $GITHUB_STEP_SUMMARY

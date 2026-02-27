@@ -256,15 +256,18 @@ def write_to_sheets(jobs_dict):
     try:
         import base64
         cred_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT", "")
-        if not cred_json:
-            print("错误: 未找到 GOOGLE_SERVICE_ACCOUNT 环境变量")
-            return False
-        # 兼容 Base64 编码或原始 JSON 字符串
-        try:
-            sa_info = json.loads(base64.b64decode(cred_json))
-        except Exception:
-            sa_info = json.loads(cred_json)
-        creds = Credentials.from_service_account_info(sa_info,
+        if cred_json:
+            # 本地/GitHub Actions：使用 JSON key（Base64 或原始 JSON）
+            try:
+                sa_info = json.loads(base64.b64decode(cred_json))
+            except Exception:
+                sa_info = json.loads(cred_json)
+            creds = Credentials.from_service_account_info(sa_info,
+                    scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
+        else:
+            # GCP Cloud Run：使用 Application Default Credentials（运行时 service account）
+            import google.auth
+            creds, _ = google.auth.default(
                 scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
         gc = gspread.authorize(creds)
         ws = gc.open_by_key(SHEET_ID).worksheet(SHEET_RANGE)
