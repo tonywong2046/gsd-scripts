@@ -34,21 +34,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up gcloud CLI
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Authenticate to GCP
+      # ✅ 步骤1：先解码 SA key，写入 GOOGLE_APPLICATION_CREDENTIALS
+      # setup-gcloud@v2 在 GOOGLE_APPLICATION_CREDENTIALS 已设置时会自动配置 gcloud 认证
+      - name: Prepare GCP credentials
         env:
           GOOGLE_SA: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
         run: |
-          # 尝试 base64 解码，验证是否有效 JSON，否则直接用原始值
           echo "$GOOGLE_SA" | base64 -d > /tmp/gcp-key.json 2>/dev/null \
             && python3 -c "import json; json.load(open('/tmp/gcp-key.json'))" 2>/dev/null \
             || echo "$GOOGLE_SA" > /tmp/gcp-key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
-          gcloud config set project ${{ env.PROJECT_ID }}
-          echo "✅ GCP 认证成功"
+          python3 -c "import json; d=json.load(open('/tmp/gcp-key.json')); print('✅ SA:', d.get('client_email','UNKNOWN'))"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json" >> $GITHUB_ENV
+
+      # ✅ 步骤2：setup-gcloud 在 GOOGLE_APPLICATION_CREDENTIALS 设好后运行，自动配置认证
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Verify authentication
+        run: |
+          echo "✅ Active accounts:"
           gcloud auth list
+          echo "✅ Project: $(gcloud config get-value project)"
 
       - name: Deploy fetch_jobs
         run: |
