@@ -37,25 +37,28 @@ jobs:
       - name: Set up gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
 
-      # 解码 Base64 或原始 JSON，直接用 gcloud 激活 service account
       - name: Authenticate to GCP
+        env:
+          GOOGLE_SA: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
         run: |
-          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' | python3 -c "
-import sys, json, base64
-raw = sys.stdin.read().strip()
-try:
-    decoded = base64.b64decode(raw).decode()
-    json.loads(decoded)
-    print(decoded)
-except Exception:
-    print(raw)
-" > /tmp/gcp-key.json
+          python3 << 'PYEOF'
+          import sys, json, base64, os
+          sa = os.environ['GOOGLE_SA']
+          try:
+              decoded = base64.b64decode(sa).decode()
+              json.loads(decoded)
+              with open('/tmp/gcp-key.json', 'w') as f:
+                  f.write(decoded)
+              print('Decoded from Base64')
+          except Exception:
+              with open('/tmp/gcp-key.json', 'w') as f:
+                  f.write(sa)
+              print('Used raw JSON')
+          PYEOF
           gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
           gcloud config set project ${{ env.PROJECT_ID }}
           echo "✅ GCP 认证成功"
           gcloud auth list
-
-      # ── 部署三个函数 ──────────────────────────────────────────────────────
 
       - name: Deploy fetch_jobs
         run: |
@@ -104,8 +107,6 @@ except Exception:
             --timeout=${{ env.TIMEOUT }} \
             --set-env-vars="GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GEMINI_API_KEY_2=${{ secrets.GEMINI_API_KEY_2 }},GEMINI_API_KEY_3=${{ secrets.GEMINI_API_KEY_3 }},GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}"
           echo "✅ fetch-reports 部署完成"
-
-      # ── 打印结果 ──────────────────────────────────────────────────────────
 
       - name: Print function URLs
         run: |
