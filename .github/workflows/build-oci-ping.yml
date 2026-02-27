@@ -1,27 +1,15 @@
-name: Build oci-ping image
+# 已迁移到 GCP，此 OCI oci-ping workflow 已停用
+name: '[DISABLED] Build oci-ping image'
 
 on:
-  push:
-    paths: ['oci-ping/**']
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: '此 workflow 已停用'
+        required: true
 
 jobs:
-  build:
+  disabled:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Login to OCIR
-        env:
-          OCIR_TOKEN: ${{ secrets.OCI_OCIR_AUTH_TOKEN }}
-        run: |
-          printf '%s' "$OCIR_TOKEN" | docker login xsp.ocir.io \
-            --username axfazd56plva/wangsenhu@gmail.com \
-            --password-stdin
-
-      - name: Build and Push (AMD64)
-        run: |
-          docker build --platform linux/amd64 \
-            -t xsp.ocir.io/axfazd56plva/gsd-scripts/oci-ping:latest \
-            oci-ping/
-          docker push xsp.ocir.io/axfazd56plva/gsd-scripts/oci-ping:latest
+      - run: echo 'This workflow is disabled.'

@@ -81,8 +81,6 @@ def get_best_gemini_model(api_key):
     return "gemini-1.5-flash"
 
 # ── Think Tank RSS Feeds ──────────────────────────────────────────────────────
-# (机构名, 分类标签, RSS URL)
-# 已移除 KFF 和 Urban Institute
 THINK_TANKS = [
     ("Pew Research Center",          "社会调研", "https://www.pewresearch.org/feed/"),
     ("CEPR",                         "经济政策", "https://cepr.org/rss.xml"),
@@ -104,7 +102,6 @@ NS_DC   = "{http://purl.org/dc/elements/1.1/}"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def norm_date(date_str):
-    """解析各种日期格式 → YYYY-MM-DD（新加坡时间）"""
     if not date_str:
         return ""
     import email.utils
@@ -125,7 +122,6 @@ def norm_date(date_str):
     return ""
 
 def get_text(el):
-    """安全提取 XML 元素文本"""
     if el is None:
         return ""
     text = (el.text or "").strip()
@@ -141,7 +137,6 @@ _SKIP_TITLES = [
 ]
 
 def is_supplementary(title):
-    """过滤附录等正式报告之外的页面"""
     t = title.lower().strip()
     if t in _SKIP_TITLES:
         return True
@@ -150,7 +145,6 @@ def is_supplementary(title):
     return False
 
 def get_atom_link(item):
-    """从 Atom entry 提取链接"""
     for link_el in item.findall(f"{NS_ATOM}link"):
         rel  = link_el.get("rel", "alternate")
         href = link_el.get("href", "")
@@ -356,13 +350,11 @@ def write_to_sheets(articles):
         from google.oauth2.service_account import Credentials
 
         if sa_json:
-            # 本地/GitHub Actions：使用 JSON key（Base64 或原始 JSON）
             sa_info = json.loads(base64.b64decode(sa_json))
             creds = Credentials.from_service_account_info(
                 sa_info, scopes=["https://www.googleapis.com/auth/spreadsheets"]
             )
         else:
-            # GCP Cloud Run：使用 Application Default Credentials
             import google.auth
             creds, _ = google.auth.default(
                 scopes=["https://www.googleapis.com/auth/spreadsheets"])
